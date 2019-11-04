@@ -78,55 +78,51 @@ class TrainingSample:
 class FuzzyModel:
     def __init__(self):
 
-        self.__training_data = []
+        self.training_data = []
         self.__training_result = []
         self.values_left = None
         self.zones_left = None
         self.values_right = None
         self.zones_right = None
+        self.rule = None
 
     def add_training_data(self, data: TrainingSample):
-        self.__training_data.append(data)
+        self.training_data.append(data)
 
     def add_training_result(self, data: TrainingSample):
         self.__training_result.append(data)
 
     def create_rules(self):
-        self.values_left, self.zones_left = self.__create_left_side()
-        self.values_right, self.zones_right = self.__create_right_side()
+        self.values_left, self.zones_left = self.__create_side(self.training_data)
+        self.values_right, self.zones_right = self.__create_side(self.__training_result)
+        self.__check_conflicts()
+        self.rule = np.hstack((self.zones_left, self.zones_right))
+        print(self.rule)
 
-    def __create_left_side(self):
-        data_zones = self.__training_data[0].zones
-        data_values = self.__training_data[0].max_values
-        if len(self.__training_data) < 1:
-            return data_values.T, data_zones.T
+    @staticmethod
+    def __create_side(tr_data):
+        data_zones = tr_data[0].zones
+        data_values = tr_data[0].max_values
+        if len(tr_data) == 1:
+            data_zones = data_zones.reshape(len(data_zones), 1)
+            data_values = data_values.reshape(len(data_values), 1)
+            return data_values, data_zones
         else:
-            for i in range(1, len(self.__training_data)):
-                data_zones = np.vstack((data_zones, self.__training_data[i].zones))
-                data_values = np.vstack((data_values, self.__training_data[i].max_values))
+            for i in range(1, len(tr_data)):
+                data_zones = np.vstack((data_zones, tr_data[i].zones))
+                data_values = np.vstack((data_values, tr_data[i].max_values))
         return data_values.T, data_zones.T
 
-    def __create_right_side(self):
-        data_zones = self.__training_result[0].zones
-        data_values = self.__training_result[0].max_values
-        if len(self.__training_result) < 1:
-            return data_values.T, data_zones.T
-        else:
-            for i in range(1, len(self.__training_result)):
-                data_zones = np.vstack((data_zones, self.__training_result[i].zones))
-                data_values = np.vstack((data_values, self.__training_result[i].max_values))
-        return data_values.T, data_zones.T
-
-    def check_conflicts(self):
+    def __check_conflicts(self):
         conflict_indices = []
         for i in range(len(self.zones_left) - 1):
             for j in range(i + 1, len(self.zones_left)):
                 if np.array_equal(self.zones_left[i], self.zones_left[j]):
-                    conflict_indices.append(self.compare_rules(i, j))
+                    conflict_indices.append(self.__compare_rules(i, j))
 
-        self.delete_conf_rules(conflict_indices)
+        self.__delete_conf_rules(conflict_indices)
 
-    def compare_rules(self, i, j):
+    def __compare_rules(self, i, j):
         sum_i = np.sum(self.values_left[i]) + np.sum(self.values_right[i])
         sum_j = np.sum(self.values_left[j]) + np.sum(self.values_right[j])
         if sum_i > sum_j:
@@ -134,13 +130,12 @@ class FuzzyModel:
         else:
             return j
 
-    def delete_conf_rules(self, indices):
+    def __delete_conf_rules(self, indices):
         for i in indices:
             self.values_left = np.delete(self.values_left, i, 0)
             self.zones_left = np.delete(self.zones_left, i, 0)
-            self.values_right = np.delete(self.values_left, i, 0)
-            self.zones_right = np.delete(self.zones_left, i, 0)
+            self.values_right = np.delete(self.values_right, i, 0)
+            self.zones_right = np.delete(self.zones_right, i, 0)
 
     def print_rules(self):
-        for i in range(len(self.rules_left)):
-            print("{} - IF {} THEN {}".format(i, self.rules_left[i], self.rules_right[i]))
+        n = self.zones_right.ndim
